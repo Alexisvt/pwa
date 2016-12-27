@@ -4,6 +4,23 @@
 
 [MDN Service Worker](https://mzl.la/2inQbu0)
 
+## How do we register a SW
+
+We do it in our firstScript.js file that we load
+
+```js
+
+// firstScript.js file
+
+if('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}
+
+// sw.js
+
+// ... SW logic here
+```
+
 ## Which are the event that a SW can subscribe
 
 - `install`
@@ -12,7 +29,6 @@
 - `message`
 - `controllerChange`
 - `updatefound`
-
 
 ## When Do we need to start to store in the `cache` whe we use SW
 
@@ -72,6 +88,146 @@ self.addEventListener('activate', (event) => {
     ))
   );
 })
+```
+
+## How to implement offline-first strategy using SW
+
+We need to do:
+
+1. First we need to present data from cache
+2. Then request the rest to the network
+
+The more that you present from the cache the better for that we will do the next:
+
+```js
+
+// Create an app shell which is a simple version of your app html but without dinamic content
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open('static-v3')
+    .then(cache => cache.addAll([
+      '/shell.html',
+      '/styles.css',
+      'script.js'
+    ]))
+  );
+});
+
+// then in our fetch event we call the cache and then the network
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+
+  // this is if for example we are taking some images from gravatar
+  if(url.origin == 'https://gravatar.com'){
+    event.respondWith(handleAvatarRequest(event));
+    return;
+  }
+
+  if(url.origin == location.origin && url.pathname == '/') {
+    event.respondWith(caches.match('shell.html'));
+    return;
+  }
+
+  event.respondWith(
+    caches.match(event.request)
+    .then(response => response || fetch(event.request))
+  );
+});
+
+// simple one solution
+/*
+function handleAvatarRequest(event) {
+  return fetch(event.request)
+    .catch(() => caches.match('/fallback-avatar.png'));
+}
+*/
+
+// the more robust solution
+function handleAvatarRequest(event) {
+  const networkFetch = fetch(event.request);
+
+  event.waitUntil(
+    networkFetch.then(response => {
+      const responseClone = response.clone();
+      caches.open('avatars')
+        .then(cache => cache.put(event.request, responseClone));
+    })
+  );
+
+  return caches.match(event.request)
+    .then(response => response || networkFetch);
+}
+```
+
+
+## What other type of storage can we use to save our data to use it on the offline-first strategy
+
+We can use [idb librarie](https://www.npmjs.com/package/idb) which is a mirror of `indexedDB`
+
+We can use it for example to store messages that comes for your server, lets pretends that our server respond with a json object like this:
+
+```json
+{
+  "id": 44444123,
+  "user": "999900011",
+  "date": "2016-03-07",
+  "text": "hola mundo"
+}
+```
+
+The next code show an example of the JavaScript needed to store and read the data using `idb` librarie
+
+```js
+
+// we installed it using npm
+import idb from "idb";
+
+// creating the DB and the object store (table for related dbs)
+const dbPromise = idb.open('messagesDb', 1, db => {
+  const messages = db.createObjectStore('messages', {keyPath: 'id'});
+
+  // a custom index to order by date
+  messages.createIndex('by-date', 'date');
+});
+
+function onNewMessage(message) {
+
+  // some function that take a message and present it to the page
+  addToPage(message);
+
+  // here is where we store the receiving message into the db
+  dbPromise.then(db => {
+    db.transaction('messages', 'readwrite')
+      .objectStore('messages').add(message);
+  });
+}
+
+// ...later in your app if we want to get those messages from the indexedDB
+dbPromise.then(db => {
+  return db.transaction('messages')
+    .objectStore('messages').index('by-date').getAll();
+}).then(allMessages => {
+  addToPage(allMessages);
+})
+```
+
+## How to just save a fixed amount of data in `indexedDB` using `idb` librarie
+
+```js
+
+// in this sample we are skipping the newest 30 items the others will be delete
+dbPromise.then(db => {
+  db.transaction('messages', 'readwrite')
+    .objectStore('messages').index('by-date')
+    .openCursor(null, 'prev')
+    .then(cursor => cursor.advance(30))
+    .then(function deleteRest(cursor) {
+      if(!cursor) return;
+
+      cursor.delete();
+      cursor.continue().then(deleteRest);
+    });
+});
 ```
 
 ## How to response with a custom response using SW
@@ -296,6 +452,37 @@ self.addEventListener('message', function(event) {
     // skipWaiting() method of the ServiceWorkerGlobalScope forces
     // the waiting service worker to become the active service worker
     self.skipWaiting();
+  }
+});
+
+```
+
+## Can you show me a little sample of **Background sync** (resiliant sending)
+
+Sure! First this is an experimental feature and is not standardized yet. It works only on canaria chrome and others beta browsers (I think).
+
+The use of this is when we want to communicate with the server later when we have connection but we want to give to the user some user experience
+
+```js
+page.js
+
+function onMessageSend(message) {
+  addToOutbox(message)
+    .then(() => navigator.serviceWorker.ready)
+    .then(reg => reg.sync.register('send-messages'))
+    .catch(() => sendMessageToServer(message));
+}
+
+sw.js
+
+self.addEventListener('sync', event => {
+  if(event.tag == 'send-messages') {
+    event.waitUntil(
+      getMessagesFromOutbox().then(messages => {
+        return sendMessageToServer(messages)
+          .then(() => removeMessagesFromOutbox(messages));
+      })
+    );
   }
 });
 
