@@ -1,5 +1,9 @@
 # A Service Worker (SW) recipes
 
+## Where is the MDN references about SW
+
+[MDN Service Worker](https://mzl.la/2inQbu0)
+
 ## Which are the event that a SW can subscribe
 
 - `install`
@@ -47,6 +51,27 @@ self.addEventListener('fetch', event => {
     })
   );
 });
+```
+
+## Where do we need to clean some states (for example clean the old cache)
+
+We can do it on the `activate` event like this:
+
+```js
+const expectedCaches = [
+  'static-v2'
+];
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then(cacheNames => Promise.all(
+      cacheNames.map(cacheName => {
+        if(!expectedCaches.includes(cacheName))
+          return caches.delete(cacheName);
+      })
+    ))
+  );
+})
 ```
 
 ## How to response with a custom response using SW
@@ -127,7 +152,7 @@ self.addEventListener('fetch', function(event) {
 });
 ```
 
-## How to update the Static Cache in `SW`
+## How to update the `cache` in the SW
 
 There are two ways to do this, let's take a look to the easy way to do it
 
