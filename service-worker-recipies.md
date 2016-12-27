@@ -1,4 +1,4 @@
-# A Service Worker (SW) FAQ
+# A Service Worker (SW) recipes
 
 ## Which are the event that a SW can subscribe
 
@@ -12,7 +12,42 @@
 
 ## When Do we need to start to store in the `cache` whe we use SW
 
-We basically do it on the `install` event
+We basically do it on the `install` event in that moment we request all the important data into the `cache api`
+
+```js
+// sw.js
+
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open('our-cache-name')
+    .then(cache => caches.addAll([
+      '/offline-resource.html',
+      '/styles.css'
+    ]))
+  );
+});
+```
+
+## How to response with the cache data that we store early using SW
+
+We need to do it on the `fetch` event and use the `request` object
+
+```js
+// sw.js
+
+self.addEventListener('fetch', event => {
+  event.respondWith(
+    caches.match(event.request)
+    // if we need to handle when we can find the resource in our cache
+    .then(response => response || fetch(event.request))
+    .catch( () => {
+      if(event.request.mode == 'navigate'){
+        return caches.match('offline-resource.html');
+      }
+    })
+  );
+});
+```
 
 ## How to response with a custom response using SW
 
@@ -231,7 +266,7 @@ _updateReady = function(worker) {
 // this code will call when postMessage is sending a message
 self.addEventListener('message', function(event) {
 
-  // the idea here is detect the specific message is this case is skipWaiting
+  // the idea here is to detect the specific message in this case is skipWaiting
   if (event.data.action === 'skipWaiting') {
     // skipWaiting() method of the ServiceWorkerGlobalScope forces
     // the waiting service worker to become the active service worker
