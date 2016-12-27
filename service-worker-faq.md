@@ -5,6 +5,9 @@
 - `install`
 - `activate`
 - `fetch`
+- `message`
+- `controllerChange`
+- `updatefound`
 
 
 ## When Do we need to start to store in the `cache` whe we use SW
@@ -150,3 +153,90 @@ self.addEventListener('activate', function(event) {
 ```
 
 **Note**: Both of these methods will return a promise
+
+## How to notify the user that there is a newest version of the site
+
+For this task we need to do a lot of things, fist we need to explain every piece of the puzzle
+
+```js
+
+// this code goes where we are making the registration process - registration.js
+if ('serviceWorker' in navigator){
+
+  var indexController = this;
+
+  // We need to extends the logic of the registration process and use the registration object
+  navigator.serviceWorker.register('/sw.js').then(function(reg) {
+
+    // the controller property tell us if the current page is controlled by a sw
+    // if not this page have the latest sw because is null in this moment of the
+    // registration
+    // page didn't load using a service worker
+    if (!navigator.serviceWorker.controller) {
+      return;
+    }
+
+    // service worker whose ServiceWorker.state is installed
+    if (reg.waiting) {
+      _updateReady(reg.waiting);
+      return;
+    }
+
+    // Returns a service worker whose state is installing
+    if (reg.installing) {
+      _trackInstalling(reg.installing);
+      return;
+    }
+
+    // it is fired any time the ServiceWorkerRegistration.installing property 
+    // acquires a new service worker
+    reg.addEventListener('updatefound', function() {
+      _trackInstalling(reg.installing);
+    });
+  });
+
+  // Ensure refresh is only called once.
+  // This works around a bug in "force update on reload".
+  var refreshing;
+  // it is fired any time the ServiceWorkerRegistration.installing property acquires a new service worker
+  navigator.serviceWorker.addEventListener('controllerchange', function() {
+    if (refreshing) return;
+    window.location.reload();
+    refreshing = true;
+  });
+}
+
+_trackInstalling = function(worker) {
+
+  // we need to subscribe to listen when the statechange change
+  worker.addEventListener('statechange', function() {
+    if (worker.state == 'installed') {
+      _updateReady(worker);
+    }
+  });
+};
+
+
+_updateReady = function(worker) {
+  // this how we communicate to a sw
+  // remember the sw doesn't have access to the DOM
+  // We need to register to a event called message to catch this event
+  // the value of the postMessage is an json like object
+  worker.postMessage({action: 'skipWaiting'});
+};
+
+
+// this code is in the service worker script - sw.js
+
+// this code will call when postMessage is sending a message
+self.addEventListener('message', function(event) {
+
+  // the idea here is detect the specific message is this case is skipWaiting
+  if (event.data.action === 'skipWaiting') {
+    // skipWaiting() method of the ServiceWorkerGlobalScope forces
+    // the waiting service worker to become the active service worker
+    self.skipWaiting();
+  }
+});
+
+```
