@@ -13,12 +13,26 @@ We do it in our firstScript.js file that we load
 // firstScript.js file
 
 if('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js');
+  navigator.serviceWorker.register('/sw.js', {scope: '/'})
+  .then(reg => {
+      console.log('Registration succeeded. Scope is ' + reg.scope);
+    }).catch(function (error) {
+      // registration failed
+      console.log('Registration failed with ' + error);
+    });
 }
 
 // sw.js
 
-// ... SW logic here
+// to test we can intercept every fetch request with an hola mundo
+self.addEventListener('fetch', event => {
+
+  event.respondWith(
+    new Response('hola mundo')
+  );
+
+});
+
 ```
 
 ## Which are the event that a SW can subscribe
