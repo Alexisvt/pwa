@@ -37,8 +37,8 @@ self.addEventListener('fetch', event => {
 
 ## Which are the event that a SW can subscribe
 
-- `install`
-- `activate`
+- `install`: request data to cache the first time
+- `activate`: where you can clean cache that you don't need anymore and other cleaning process
 - `fetch`
 - `message`
 - `controllerChange`
